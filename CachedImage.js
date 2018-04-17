@@ -23,6 +23,8 @@ const {
   Animated
 } = ReactNative;
 
+const resolveAssetSource = require("react-native/Libraries/Image/resolveAssetSource");
+
 const styles = StyleSheet.create({
   image: {
     backgroundColor: "transparent"
@@ -67,10 +69,29 @@ class CachedImage extends React.Component {
 
   static defaultProps = {
     renderImage: props => {
-      return <Image style={props.style} ref={CACHED_IMAGE_REF} {...props} />;
+      let isTrue =
+        props.fitHeight &&
+        props.width &&
+        props.heightImg !== 0 &&
+        props.widthImg !== 0;
+      return (
+        <Image
+          {...props}
+          style={[
+            props.style,
+            isTrue && {
+              width: props.width,
+              height: props.width * props.heightImg / props.widthImg
+            }
+          ]}
+          ref={CACHED_IMAGE_REF}
+        />
+      );
     },
     activityIndicatorProps: {},
-    placeholderSource: { uri: "" }
+    placeholderSource: { uri: "" },
+    fitHeight: false,
+    width: 0
   };
 
   static contextTypes = {
@@ -83,9 +104,10 @@ class CachedImage extends React.Component {
     this.state = {
       isCacheable: true,
       cachedImagePath: null,
-      networkAvailable: true
+      networkAvailable: true,
+      widthImg: 0,
+      heightImg: 0
     };
-
     this.getImageCacheManagerOptions = this.getImageCacheManagerOptions.bind(
       this
     );
@@ -181,6 +203,35 @@ class CachedImage extends React.Component {
       });
   }
 
+  componentDidMount() {
+    if (this.props.width && this.props.fitHeight) {
+      this.getSize().then(data => {
+        this.setState({ widthImg: data.width, heightImg: data.height });
+      });
+    }
+  }
+
+  getSize() {
+    const image =
+      this.state.isCacheable && this.state.cachedImagePath
+        ? { uri: "file://" + this.state.cachedImagePath }
+        : this.props.source;
+    return new Promise((resolve, reject) => {
+      if (typeof image === "number") {
+        const { width, height } = resolveAssetSource(image);
+        resolve({ width, height });
+      } else {
+        Image.getSize(
+          image.uri,
+          (width, height) => {
+            resolve({ width, height });
+          },
+          reject
+        );
+      }
+    });
+  }
+
   render() {
     if (this.state.isCacheable && !this.state.cachedImagePath) {
       return this.renderLoader();
@@ -198,7 +249,11 @@ class CachedImage extends React.Component {
         ...props,
         key: `${props.key || source.uri}error`,
         style,
-        source: this.props.fallbackSource
+        source: this.props.fallbackSource,
+        fitHeight: this.props.fitHeight,
+        width: this.props.width,
+        widthImg: this.state.widthImg,
+        heightImg: this.state.heightImg
         // placeholderSource: this.props.placeholderSource
       });
     }
@@ -206,7 +261,11 @@ class CachedImage extends React.Component {
       ...props,
       key: props.key || source.uri,
       style,
-      source
+      source,
+      fitHeight: this.props.fitHeight,
+      width: this.props.width,
+      widthImg: this.state.widthImg,
+      heightImg: this.state.heightImg
       // placeholderSource: this.props.placeholderSource
     });
   }
@@ -260,7 +319,11 @@ class CachedImage extends React.Component {
           style={activityIndicatorStyle}
         />
       ),
-      placeholderSource: this.props.placeholderSource
+      placeholderSource: this.props.placeholderSource,
+      fitHeight: this.props.fitHeight,
+      width: this.props.width,
+      widthImg: this.state.widthImg,
+      heightImg: this.state.heightImg
     });
   }
 }
